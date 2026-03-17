@@ -563,7 +563,7 @@ export default function LandingPage() {
                 <div className="nav-logo-icon" style={{ width: '24px', height: '24px' }}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" fill="white" opacity="0.9"/></svg>
                 </div>
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '16px' }}>StockPro</span>
+                <span style={{ fontFamily: 'var(--font-main)', fontWeight: 800, fontSize: '16px' }}>StockPro</span>
               </div>
               <p>Gestão de estoque inteligente para empresas B2B que operam com volume real.</p>
               <div className="footer-status">
