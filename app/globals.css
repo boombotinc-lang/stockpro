@@ -426,11 +426,6 @@ ul, ol { list-style: none; }
   height: 6px;
   border-radius: 50%;
   background: var(--orange);
-  animation: pulseDot 2s ease-in-out infinite;
-}
-@keyframes pulseDot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.8); }
 }
 .hero h1 {
   font-family: var(--font-display);
@@ -1412,7 +1407,6 @@ ul, ol { list-style: none; }
   height: 6px;
   border-radius: 50%;
   background: var(--green);
-  animation: pulseDot 2s ease-in-out infinite;
 }
 .footer-col h4 {
   font-weight: 700;
