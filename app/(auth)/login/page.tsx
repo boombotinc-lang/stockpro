@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -83,5 +83,13 @@ export default function LoginPage() {
         <Link href="/register" className="text-blue-600 hover:underline">Criar conta</Link>
       </p>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="bg-white rounded-lg shadow-sm border p-8 text-center text-gray-400">Carregando...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }
