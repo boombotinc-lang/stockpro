@@ -1,10 +1,10 @@
 import Stripe from 'stripe'
 import { prisma } from './db'
-import type { Plan } from '@prisma/client'
+type Plan = 'FREE' | 'PRO' | 'ENTERPRISE'
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
-export const STRIPE_PLANS = {
+export const STRIPE_PLANS: Record<Plan, { priceId: string | null; maxUsers: number; maxProducts: number; features: string[] }> = {
   FREE: {
     priceId: null,
     maxUsers: 1,
@@ -23,7 +23,7 @@ export const STRIPE_PLANS = {
     maxProducts: Infinity,
     features: ['Usuários ilimitados', 'Tudo do Pro', 'SSO', 'SLA', 'Suporte prioritário'],
   },
-} satisfies Record<Plan, { priceId: string | null; maxUsers: number; maxProducts: number; features: string[] }>
+}
 
 export async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: string) {
   try {
@@ -57,7 +57,8 @@ export async function syncOrgPlanFromStripe(subscriptionId: string) {
       expand: ['items.data.price.product'],
     })
 
-    const priceId = subscription.items.data[0].price.id
+    const subscriptionItem = subscription.items.data[0]
+    const priceId = subscriptionItem.price.id
     let plan: Plan = 'FREE'
 
     if (priceId === STRIPE_PLANS.PRO.priceId) plan = 'PRO'
@@ -68,7 +69,7 @@ export async function syncOrgPlanFromStripe(subscriptionId: string) {
       data: {
         plan,
         subscriptionStatus: subscription.status.toUpperCase() as 'ACTIVE' | 'CANCELED' | 'PAST_DUE' | 'TRIALING' | 'INCOMPLETE' | 'PAUSED',
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        currentPeriodEnd: new Date(subscriptionItem.current_period_end * 1000),
         maxUsers:    STRIPE_PLANS[plan].maxUsers === Infinity ? 999999 : STRIPE_PLANS[plan].maxUsers,
         maxProducts: STRIPE_PLANS[plan].maxProducts === Infinity ? 999999 : STRIPE_PLANS[plan].maxProducts,
       },
