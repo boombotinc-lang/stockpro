@@ -1,0 +1,9 @@
+{
+  "extends": "@stockpro/config/typescript/base",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,10 @@
+{
+  "extends": "@stockpro/config/typescript/base",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": false,
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,12 +1,17 @@
 {
-  "name": "stockpro",
-  "version": "0.1.0",
+  "name": "stockpro-monorepo",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "turbo dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "turbo:build": "turbo build",
+    "turbo:dev": "turbo dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
@@ -15,20 +20,6 @@
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
-  "dependencies": {
-    "@prisma/client": "^5.22.0",
-    "@supabase/ssr": "^0.9.0",
-    "@supabase/supabase-js": "^2.99.2",
-    "@upstash/ratelimit": "^2.0.8",
-    "@upstash/redis": "^1.37.0",
-    "date-fns": "^4.1.0",
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18",
-    "resend": "^6.9.4",
-    "stripe": "^20.4.1",
-    "zod": "^4.3.6"
-  },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
@@ -36,9 +27,14 @@
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
+    "prettier": "^3.3.3",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
+    "turbo": "^2.3.3",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

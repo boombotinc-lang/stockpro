@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "gitignore": false,
+  "buildCommand": "cd ../.. && npx turbo build --filter=@stockpro/app",
+  "installCommand": "cd ../.. && npm install",
+  "framework": "nextjs",
+  "regions": ["gru1"]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@stockpro/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./eslint": "./eslint/index.js",
+    "./tailwind": "./tailwind/index.ts",
+    "./typescript/base": "./typescript/base.json",
+    "./typescript/nextjs": "./typescript/nextjs.json"
+  },
+  "files": [
+    "eslint",
+    "tailwind",
+    "typescript"
+  ]
+}

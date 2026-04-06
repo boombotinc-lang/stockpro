@@ -6,8 +6,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Needed so Next.js transpiles the TypeScript workspace packages
-  transpilePackages: ["@stockpro/db", "@stockpro/types", "@stockpro/ui"],
+  transpilePackages: ["@stockpro/ui"],
   images: {
     remotePatterns: [
       {

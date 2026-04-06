@@ -1,0 +1,497 @@
+// ============================================================
+// PRISMA SCHEMA — SaaS Gerenciador de Estoque
+// Banco: Supabase (PostgreSQL)
+// Auth:  Supabase Auth (tabela auth.users é gerenciada pelo Supabase)
+// Multi-tenant: organizationId em todas as tabelas
+// RLS: aplicado via SQL migrations separadas
+// ============================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+
+  @@map("plan")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+
+  @@map("member_role")
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+
+  @@map("invite_status")
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  TRANSFER
+  RETURN
+
+  @@map("stock_movement_type")
+}
+
+enum CashFlowType {
+  INCOME
+  EXPENSE
+
+  @@map("cash_flow_type")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+  INCOMPLETE
+  PAUSED
+
+  @@map("subscription_status")
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  RESTORED
+  LOGIN
+  LOGOUT
+  PERMISSION_CHANGED
+  STOCK_MOVED
+  PLAN_CHANGED
+
+  @@map("audit_action")
+}
+
+// ============================================================
+// ORGANIZATIONS (tenant raiz)
+// ============================================================
+
+model Organization {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  logoUrl   String?  @map("logo_url")
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  stripeCustomerId     String?            @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  subscriptionStatus   SubscriptionStatus @default(TRIALING) @map("subscription_status")
+  trialEndsAt          DateTime?          @map("trial_ends_at") @db.Timestamptz
+  currentPeriodEnd     DateTime?          @map("current_period_end") @db.Timestamptz
+
+  maxUsers    Int @default(1) @map("max_users")
+  maxProducts Int @default(100) @map("max_products")
+
+  members            OrgMember[]
+  invites            OrgInvite[]
+  products           Product[]
+  categories         Category[]
+  locations          StockLocation[]
+  stockMovements     StockMovement[]
+  cashFlowEntries    CashFlowEntry[]
+  cashFlowCategories CashFlowCategory[]
+  auditLogs          AuditLog[]
+  tags               Tag[]
+  dashboardWidgets   DashboardWidget[]
+
+  @@map("organizations")
+}
+
+// ============================================================
+// PROFILES (extensão do auth.users do Supabase)
+// ============================================================
+
+model Profile {
+  id        String   @id @db.Uuid
+  email     String   @unique
+  fullName  String?  @map("full_name")
+  avatarUrl String?  @map("avatar_url")
+  phone     String?
+  timezone  String   @default("America/Sao_Paulo")
+  locale    String   @default("pt-BR")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  memberships     OrgMember[]
+  invitesSent     OrgInvite[]       @relation("InvitedBy")
+  stockMovements  StockMovement[]
+  cashFlowEntries CashFlowEntry[]
+  auditLogs       AuditLog[]
+  createdProducts Product[]         @relation("ProductCreatedBy")
+  updatedProducts Product[]         @relation("ProductUpdatedBy")
+
+  @@map("profiles")
+}
+
+// ============================================================
+// ORG MEMBERS
+// ============================================================
+
+model OrgMember {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String     @map("org_id") @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  role        MemberRole @default(VIEWER)
+  permissions Json       @default("{}")
+  isActive    Boolean    @default(true) @map("is_active")
+  joinedAt    DateTime   @default(now()) @map("joined_at") @db.Timestamptz
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("org_members")
+}
+
+// ============================================================
+// ORG INVITES
+// ============================================================
+
+model OrgInvite {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String       @map("org_id") @db.Uuid
+  email       String
+  role        MemberRole   @default(VIEWER)
+  token       String       @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status      InviteStatus @default(PENDING)
+  invitedById String       @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime     @map("expires_at") @db.Timestamptz
+  acceptedAt  DateTime?    @map("accepted_at") @db.Timestamptz
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy Profile      @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([orgId])
+  @@index([email])
+  @@map("org_invites")
+}
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+
+model Category {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  name        String
+  description String?
+  color       String?
+  parentId    String?  @map("parent_id") @db.Uuid
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parent   Category?    @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[]   @relation("CategoryHierarchy")
+  products Product[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@map("categories")
+}
+
+// ============================================================
+// TAGS
+// ============================================================
+
+model Tag {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  name      String
+  color     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  products ProductTag[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@map("tags")
+}
+
+// ============================================================
+// STOCK LOCATIONS
+// ============================================================
+
+model StockLocation {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  name        String
+  description String?
+  isDefault   Boolean  @default(false) @map("is_default")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  org            Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+  productStock   ProductStock[]
+
+  @@index([orgId])
+  @@map("stock_locations")
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+model Product {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  categoryId  String?  @map("category_id") @db.Uuid
+
+  sku         String
+  barcode     String?
+  name        String
+  description String?
+  imageUrl    String?  @map("image_url")
+  imageUrls   String[] @map("image_urls")
+
+  costPrice   Decimal  @default(0) @map("cost_price") @db.Decimal(12, 2)
+  salePrice   Decimal  @default(0) @map("sale_price") @db.Decimal(12, 2)
+
+  unit        String   @default("un")
+  minStock    Int      @default(0) @map("min_stock")
+  maxStock    Int?     @map("max_stock")
+
+  isActive    Boolean  @default(true) @map("is_active")
+  isArchived  Boolean  @default(false) @map("is_archived")
+
+  attributes  Json     @default("{}")
+
+  createdById String   @map("created_by_id") @db.Uuid
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  org            Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  category       Category?       @relation(fields: [categoryId], references: [id])
+  createdBy      Profile         @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  updatedBy      Profile?        @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
+  tags           ProductTag[]
+  stockMovements StockMovement[]
+  productStock   ProductStock[]
+
+  @@unique([orgId, sku])
+  @@index([orgId])
+  @@index([orgId, isActive])
+  @@index([orgId, categoryId])
+  @@map("products")
+}
+
+// ============================================================
+// PRODUCT TAGS (many-to-many)
+// ============================================================
+
+model ProductTag {
+  productId String @map("product_id") @db.Uuid
+  tagId     String @map("tag_id") @db.Uuid
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@map("product_tags")
+}
+
+// ============================================================
+// PRODUCT STOCK
+// ============================================================
+
+model ProductStock {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId  String   @map("product_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  quantity   Int      @default(0)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  product  Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locationId])
+  @@index([productId])
+  @@map("product_stock")
+}
+
+// ============================================================
+// STOCK MOVEMENTS (append-only)
+// ============================================================
+
+model StockMovement {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String            @map("org_id") @db.Uuid
+  productId   String            @map("product_id") @db.Uuid
+  locationId  String            @map("location_id") @db.Uuid
+  type        StockMovementType
+  quantity    Int
+  unitCost    Decimal?          @map("unit_cost") @db.Decimal(12, 2)
+  totalCost   Decimal?          @map("total_cost") @db.Decimal(12, 2)
+
+  referenceType String? @map("reference_type")
+  referenceId   String? @map("reference_id")
+  referenceCode String? @map("reference_code")
+
+  reason      String?
+  notes       String?
+
+  stockBefore Int @map("stock_before")
+  stockAfter  Int @map("stock_after")
+
+  performedById String   @map("performed_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product     Product       @relation(fields: [productId], references: [id])
+  location    StockLocation @relation(fields: [locationId], references: [id])
+  performedBy Profile       @relation(fields: [performedById], references: [id])
+
+  cashFlowEntry CashFlowEntry?
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([orgId, productId])
+  @@index([orgId, type])
+  @@map("stock_movements")
+}
+
+// ============================================================
+// CASH FLOW CATEGORIES
+// ============================================================
+
+model CashFlowCategory {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String       @map("org_id") @db.Uuid
+  name      String
+  type      CashFlowType
+  color     String?
+  icon      String?
+  isDefault Boolean      @default(false) @map("is_default")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  org     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  entries CashFlowEntry[]
+
+  @@unique([orgId, name, type])
+  @@index([orgId])
+  @@map("cash_flow_categories")
+}
+
+// ============================================================
+// CASH FLOW ENTRIES
+// ============================================================
+
+model CashFlowEntry {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String       @map("org_id") @db.Uuid
+  categoryId  String?      @map("category_id") @db.Uuid
+  type        CashFlowType
+  amount      Decimal      @db.Decimal(12, 2)
+  description String?
+  notes       String?
+
+  occurredAt  DateTime @map("occurred_at") @db.Date
+
+  movementId  String?  @unique @map("movement_id") @db.Uuid
+
+  isRecurring     Boolean   @default(false) @map("is_recurring")
+  recurringDays   Int?      @map("recurring_days")
+  nextOccurrence  DateTime? @map("next_occurrence") @db.Date
+
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  org       Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  category  CashFlowCategory? @relation(fields: [categoryId], references: [id])
+  movement  StockMovement?    @relation(fields: [movementId], references: [id])
+  createdBy Profile           @relation(fields: [createdById], references: [id])
+
+  @@index([orgId, occurredAt(sort: Desc)])
+  @@index([orgId, type])
+  @@index([orgId, categoryId])
+  @@map("cash_flow_entries")
+}
+
+// ============================================================
+// AUDIT LOGS (append-only)
+// ============================================================
+
+model AuditLog {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId      String      @map("org_id") @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id") @db.Uuid
+
+  before     Json?
+  after      Json?
+  diff       Json?
+
+  ipAddress  String? @map("ip_address")
+  userAgent  String? @map("user_agent")
+  metadata   Json    @default("{}")
+
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user Profile      @relation(fields: [userId], references: [id])
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([orgId, entityType, entityId])
+  @@index([orgId, userId])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// DASHBOARD WIDGETS
+// ============================================================
+
+model DashboardWidget {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId      String @map("org_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+
+  widgetType String @map("widget_type")
+  config     Json   @default("{}")
+  position   Json   @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, userId])
+  @@map("dashboard_widgets")
+}
